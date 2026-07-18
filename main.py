@@ -192,27 +192,4 @@ class RealOSINTEngine:
 # ------------------ GUI (same as before, but now shows everything) ------------------
 class SecretRevealerGUI:
     # ... (the GUI code is identical to the previous version; I'll include the full final code in a single block at the end)
-    def ahmia_search(self, query):
-    import socks
-    import socket
-    # Set up Tor SOCKS proxy
-    socks.set_default_proxy(socks.SOCKS5, "127.0.0.1", 9050)
-    socket.socket = socks.socksocket
-    url = f"https://ahmia.fi/search/?q={query}"
-    try:
-        resp = requests.get(url, timeout=20)
-        # Parse results with BeautifulSoup to extract snippets
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(resp.text, 'html.parser')
-        results = []
-        for item in soup.select('.result'):
-            title = item.select_one('.result-title')
-            if title:
-                results.append({
-                    "title": title.text,
-                    "link": title.get('href'),
-                    "snippet": item.select_one('.result-snippet').text if item.select_one('.result-snippet') else ''
-                })
-        return results
-    except Exception as e:
-        return [{"error": str(e)}]
+
