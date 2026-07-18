@@ -1,11 +1,13 @@
-# Secret‑Revealer v2.0 – Core Requirements
+# Secret‑Revealer v3.0 – Core Requirements
 # ------------------------------------------------------------
-# The GUI and mock engine run with Python's standard library.
-# No external packages are strictly required for basic operation.
-# However, to enable real OSINT modules, uncomment the lines below.
+# main.py imports `requests` unconditionally, so it is required
+# (not optional) to run the application.
+requests>=2.31.0
 
-# Core HTTP and parsing
-# requests>=2.31.0
+# The GUI and mock engine otherwise run with Python's standard library.
+# To enable additional OSINT modules, uncomment the lines below.
+
+# Additional HTTP and parsing
 # beautifulsoup4>=4.12.2
 # lxml>=4.9.3
 
