@@ -273,28 +273,28 @@ class SecretRevealerGUI:
         left = ttk.LabelFrame(main, text="Search Target", padding=10)
         left.pack(side=tk.LEFT, fill=tk.Y, padx=(0,10))
 
-        ttk.Label(left, text="Full Name:").grid(row=0, col=0, sticky=tk.W, pady=3)
+        ttk.Label(left, text="Full Name:").grid(row=0, column=0, sticky=tk.W, pady=3)
         self.name_entry = ttk.Entry(left, width=30)
-        self.name_entry.grid(row=0, col=1, pady=3)
+        self.name_entry.grid(row=0, column=1, pady=3)
 
-        ttk.Label(left, text="Email:").grid(row=1, col=0, sticky=tk.W, pady=3)
+        ttk.Label(left, text="Email:").grid(row=1, column=0, sticky=tk.W, pady=3)
         self.email_entry = ttk.Entry(left, width=30)
-        self.email_entry.grid(row=1, col=1, pady=3)
+        self.email_entry.grid(row=1, column=1, pady=3)
 
-        ttk.Label(left, text="Phone:").grid(row=2, col=0, sticky=tk.W, pady=3)
+        ttk.Label(left, text="Phone:").grid(row=2, column=0, sticky=tk.W, pady=3)
         self.phone_entry = ttk.Entry(left, width=30)
-        self.phone_entry.grid(row=2, col=1, pady=3)
+        self.phone_entry.grid(row=2, column=1, pady=3)
 
-        ttk.Label(left, text="Username:").grid(row=3, col=0, sticky=tk.W, pady=3)
+        ttk.Label(left, text="Username:").grid(row=3, column=0, sticky=tk.W, pady=3)
         self.username_entry = ttk.Entry(left, width=30)
-        self.username_entry.grid(row=3, col=1, pady=3)
+        self.username_entry.grid(row=3, column=1, pady=3)
 
-        ttk.Label(left, text="Domain:").grid(row=4, col=0, sticky=tk.W, pady=3)
+        ttk.Label(left, text="Domain:").grid(row=4, column=0, sticky=tk.W, pady=3)
         self.domain_entry = ttk.Entry(left, width=30)
-        self.domain_entry.grid(row=4, col=1, pady=3)
+        self.domain_entry.grid(row=4, column=1, pady=3)
 
         btn_frame = ttk.Frame(left)
-        btn_frame.grid(row=5, col=0, columnspan=2, pady=15)
+        btn_frame.grid(row=5, column=0, columnspan=2, pady=15)
         ttk.Button(btn_frame, text="🔍 Run Scan", command=self.run_scan).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Clear", command=self.clear_fields).pack(side=tk.LEFT, padx=5)
 
