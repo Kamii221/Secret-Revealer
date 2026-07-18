@@ -15,12 +15,15 @@ from datetime import datetime
 import os
 import sys
 
-# ------------------ CONFIG (Your Keys) ------------------
+# ------------------ CONFIG (set via environment variables, not hardcoded) ------------------
+# export NUMVERIFY_KEY=...    (https://numverify.com)
+# export GOOGLE_API_KEY=...   (https://console.cloud.google.com, format: AIza...)
+# export GOOGLE_CX=...        (Google Programmable Search Engine ID)
 CONFIG = {
-    "numverify_key": "2b14cc0a151004df6507b96fcb275535",
-    "google_api_key": "AQ.Ab8RN6I6sLKz3NQdXAu2JfwP3BU6PgDuN-lj2ULbmWYLincKDg",
-    "google_cx": "0536e286037c942e3",
-    "tor_proxy": "socks5h://127.0.0.1:9050"
+    "numverify_key": os.environ.get("NUMVERIFY_KEY", ""),
+    "google_api_key": os.environ.get("GOOGLE_API_KEY", ""),
+    "google_cx": os.environ.get("GOOGLE_CX", ""),
+    "tor_proxy": os.environ.get("TOR_PROXY", "socks5h://127.0.0.1:9050")
 }
 
 # ------------------ PLATFORM LIST FOR USERNAME SEARCH ------------------
@@ -150,6 +153,33 @@ class OSINTEngine:
         except:
             return {"error": "WHOIS failed"}
 
+    # ---------- DARK WEB (Ahmia index search) ----------
+    def search_dark_web(self, query):
+        """Search the Ahmia dark-web index. Ahmia (ahmia.fi) is a clearnet-searchable
+        index of .onion sites that excludes abuse content; no Tor connection is
+        required to query its search page, only to visit the .onion results."""
+        if not query:
+            return []
+        results = []
+        url = "https://ahmia.fi/search/"
+        try:
+            resp = self.session.get(url, params={"q": query}, timeout=10)
+            if resp.status_code == 200:
+                for m in re.finditer(
+                    r'<li[^>]*class="result"[^>]*>.*?<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>.*?'
+                    r'<p[^>]*class="description"[^>]*>(.*?)</p>',
+                    resp.text, re.S
+                ):
+                    link, title, desc = m.groups()
+                    results.append({
+                        "title": re.sub(r"<[^>]+>", "", title).strip(),
+                        "link": link,
+                        "snippet": re.sub(r"<[^>]+>", "", desc).strip()[:200]
+                    })
+        except Exception:
+            pass
+        return results[:5]
+
     # ---------- MAIN RUN ----------
     def run(self, data):
         result = {
@@ -230,12 +260,24 @@ class OSINTEngine:
                 result["identity"]["whois"] = whois_data
                 result["score"] += 0.1
 
-        # 6. Dark web placeholder (you can add Tor/Ahmia later)
-        result["identity"]["dark_web"].append({
-            "source": "⚠️ Dark Web (Tor integration ready)",
-            "date": datetime.now().strftime("%Y-%m-%d"),
-            "snippet": "Enable Tor and add Ahmia search to get real dark web mentions."
-        })
+        # 6. Dark web (Ahmia index search)
+        dark_query = data.get("username") or data.get("email") or data.get("name")
+        if dark_query:
+            dark_hits = self.search_dark_web(dark_query)
+            if dark_hits:
+                for hit in dark_hits:
+                    result["identity"]["dark_web"].append({
+                        "source": "Ahmia",
+                        "date": datetime.now().strftime("%Y-%m-%d"),
+                        "snippet": f"{hit['title']}: {hit['snippet']} ({hit['link']})"
+                    })
+                result["score"] += 0.1
+            else:
+                result["identity"]["dark_web"].append({
+                    "source": "Ahmia",
+                    "date": datetime.now().strftime("%Y-%m-%d"),
+                    "snippet": "No dark web mentions found."
+                })
 
         result["score"] = min(result["score"] + 0.3, 1.0)
         return result
