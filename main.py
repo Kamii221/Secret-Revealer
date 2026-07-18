@@ -1,12 +1,6 @@
 #!/usr/bin/env python3
 """
-Secret‑Revealer v2.1 – Real OSINT Intelligence Engine
-Integrates:
-- HaveIBeenPwned (breach lookup)
-- numverify (phone carrier & location)
-- Google Custom Search (public profile search)
-- WHOIS (domain registrar info)
-- Tor placeholder for dark web (you can connect Ahmia or OnionSearch)
+Secret‑Revealer v2.2 – Full OSINT Engine with Phone, Breach, Search
 Author: CAT
 """
 
@@ -21,12 +15,12 @@ from datetime import datetime
 import os
 import sys
 
-# ------------------ CONFIGURATION (Add Your API Keys) ------------------
+# ------------------ CONFIGURATION ------------------
 CONFIG = {
-    "hibp_api_key": "",           # optional, but helps with rate limits
-    "numverify_key": "2b14cc0a151004df6507b96fcb275535",          # get from numverify.com (free tier: 250/month)
-    "google_api_key": "",         # Google Custom Search API key
-    "google_cx": "",              # Google Custom Search engine ID
+    "numverify_key": "2b14cc0a151004df6507b96fcb275535",   # YOUR KEY
+    "hibp_api_key": "",                                    # optional
+    "google_api_key": "",                                  # get from Google
+    "google_cx": "",                                       # Google CSE ID
     "tor_proxy": "socks5h://127.0.0.1:9050"
 }
 
@@ -34,10 +28,35 @@ CONFIG = {
 class RealOSINTEngine:
     def __init__(self):
         self.session = requests.Session()
-        self.session.headers.update({"User-Agent": "Secret-Revealer/2.1"})
+        self.session.headers.update({"User-Agent": "Secret-Revealer/2.2"})
 
+    # ---------- PHONE LOOKUP (numverify) ----------
+    def lookup_phone(self, phone):
+        """Get carrier, country, location via numverify."""
+        if not phone or not CONFIG["numverify_key"]:
+            return None
+        url = f"http://apilayer.net/api/validate?access_key={CONFIG['numverify_key']}&number={phone}"
+        try:
+            resp = self.session.get(url, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("valid"):
+                    return {
+                        "country": data.get("country_name"),
+                        "country_code": data.get("country_code"),
+                        "carrier": data.get("carrier"),
+                        "location": data.get("location"),
+                        "line_type": data.get("line_type"),
+                        "international_format": data.get("international_format"),
+                        "local_format": data.get("local_format")
+                    }
+            return None
+        except Exception as e:
+            return {"error": str(e)}
+
+    # ---------- BREACH CHECK (HaveIBeenPwned) ----------
     def check_hibp(self, email):
-        """Check if email appears in known breaches via HaveIBeenPwned"""
+        """Check if email appears in known breaches."""
         if not email:
             return []
         url = f"https://haveibeenpwned.com/api/v3/breachedaccount/{email}"
@@ -53,28 +72,9 @@ class RealOSINTEngine:
         except:
             return []
 
-    def lookup_phone(self, phone):
-        """Get carrier, country, location via numverify (free tier)"""
-        if not phone or not CONFIG["numverify_key"]:
-            return None
-        url = f"http://apilayer.net/api/validate?access_key={CONFIG['numverify_key']}&number={phone}"
-        try:
-            resp = self.session.get(url, timeout=10)
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get("valid"):
-                    return {
-                        "country": data.get("country_name"),
-                        "carrier": data.get("carrier"),
-                        "location": data.get("location"),
-                        "line_type": data.get("line_type")
-                    }
-            return None
-        except:
-            return None
-
+    # ---------- GOOGLE SEARCH ----------
     def google_search(self, query):
-        """Search for public profiles using Google Custom Search"""
+        """Search public profiles using Google Custom Search."""
         if not CONFIG["google_api_key"] or not CONFIG["google_cx"] or not query:
             return []
         url = "https://www.googleapis.com/customsearch/v1"
@@ -92,20 +92,7 @@ class RealOSINTEngine:
         except:
             return []
 
-    def whois_lookup(self, domain):
-        """Simple WHOIS using python-whois if installed, else mock"""
-        try:
-            import whois
-            w = whois.whois(domain)
-            return {
-                "registrar": w.registrar,
-                "creation_date": str(w.creation_date),
-                "expiration_date": str(w.expiration_date),
-                "name_servers": w.name_servers
-            }
-        except:
-            return {"error": "WHOIS lookup failed (install python-whois or check domain)"}
-
+    # ---------- MAIN RUN METHOD ----------
     def run(self, data, modules=None):
         result = {
             "identity": {
@@ -124,7 +111,25 @@ class RealOSINTEngine:
 
         modules = modules or []
 
-        # 1. Email breach check (Enrichment)
+        # 1. Phone lookup (Clearnet)
+        phone = data.get("phone")
+        if phone and ("clearnet" in str(modules) or "numverify" in str(modules)):
+            phone_info = self.lookup_phone(phone)
+            if phone_info and "error" not in phone_info:
+                result["identity"]["phones"].append({
+                    "number": phone,
+                    "international": phone_info.get("international_format"),
+                    "local": phone_info.get("local_format"),
+                    "carrier": phone_info.get("carrier"),
+                    "country": phone_info.get("country"),
+                    "country_code": phone_info.get("country_code"),
+                    "location": phone_info.get("location"),
+                    "line_type": phone_info.get("line_type"),
+                    "confidence": 0.9
+                })
+                result["score"] += 0.2
+
+        # 2. Email breach check (Enrichment)
         email = data.get("email")
         if email and ("enrichment" in str(modules) or "haveibeenpwned" in str(modules)):
             breaches = self.check_hibp(email)
@@ -132,30 +137,15 @@ class RealOSINTEngine:
                 result["identity"]["breaches"].append({
                     "source": b.get("Name"),
                     "date": b.get("BreachDate"),
-                    "description": b.get("Description", "")[:100]
+                    "description": b.get("Description", "")[:150]
                 })
             if breaches:
-                result["score"] += 0.2
+                result["score"] += 0.3
                 result["identity"]["emails"].append({
                     "address": email,
                     "source": "HaveIBeenPwned",
                     "confidence": 0.95
                 })
-
-        # 2. Phone lookup (Clearnet)
-        phone = data.get("phone")
-        if phone and ("clearnet" in str(modules) or "numverify" in str(modules)):
-            phone_info = self.lookup_phone(phone)
-            if phone_info:
-                result["identity"]["phones"].append({
-                    "number": phone,
-                    "carrier": phone_info.get("carrier"),
-                    "country": phone_info.get("country"),
-                    "location": phone_info.get("location"),
-                    "line_type": phone_info.get("line_type"),
-                    "confidence": 0.9
-                })
-                result["score"] += 0.1
 
         # 3. Google search for username/name (Clearnet)
         query = data.get("username") or data.get("name")
@@ -168,31 +158,23 @@ class RealOSINTEngine:
                 ]
                 result["score"] += 0.1
 
-        # 4. WHOIS for domain (Enrichment)
-        domain = data.get("domain")
-        if domain and ("enrichment" in str(modules) or "whois" in str(modules)):
-            whois_data = self.whois_lookup(domain)
-            if whois_data and "error" not in whois_data:
-                result["identity"]["addresses"].append(f"Domain: {domain} – Registrar: {whois_data.get('registrar')}")
-                result["score"] += 0.1
-
-        # 5. Dark web (placeholder – integrate Tor/Ahmia here)
+        # 4. Dark web (placeholder – connect Tor + Ahmia here)
         if "darkweb" in str(modules):
             result["identity"]["dark_web_mentions"].append({
-                "source": "⚠️ Dark Web (not yet integrated – connect Tor + Ahmia)",
+                "source": "⚠️ Dark Web (pending Tor + Ahmia integration)",
                 "date": datetime.now().strftime("%Y-%m-%d"),
                 "snippet": "To enable real dark web, install Tor, run it, and add Ahmia/OnionSearch API calls."
             })
 
-        # Normalize score to 0-1
-        result["score"] = min(result["score"] + 0.5, 1.0)
+        # Normalise score to 0-1
+        result["score"] = min(result["score"] + 0.4, 1.0)
         return result
 
-# ------------------ GUI APPLICATION ------------------
+# ------------------ GUI ------------------
 class SecretRevealerGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Secret‑Revealer v2.1 – Real OSINT Intelligence")
+        self.root.title("Secret‑Revealer v2.2 – Full OSINT Engine")
         self.root.geometry("1200x800")
         self.root.minsize(1000, 700)
 
@@ -214,7 +196,7 @@ class SecretRevealerGUI:
         menubar.add_cascade(label="File", menu=file_menu)
 
         settings_menu = tk.Menu(menubar, tearoff=0)
-        settings_menu.add_command(label="Configure API Keys", command=self.open_settings)
+        settings_menu.add_command(label="API Keys / Settings", command=self.open_settings)
         settings_menu.add_command(label="Toggle Tor (mock)", command=self.toggle_tor)
         menubar.add_cascade(label="Settings", menu=settings_menu)
 
@@ -261,9 +243,9 @@ class SecretRevealerGUI:
         self.clearnet_var = tk.IntVar(value=1)
         self.darkweb_var = tk.IntVar(value=1)
         self.enrich_var = tk.IntVar(value=1)
-        ttk.Checkbutton(left_frame, text="Clearnet (Google, Phone)", variable=self.clearnet_var).grid(row=7, column=0, sticky=tk.W)
+        ttk.Checkbutton(left_frame, text="Clearnet (Phone, Google)", variable=self.clearnet_var).grid(row=7, column=0, sticky=tk.W)
         ttk.Checkbutton(left_frame, text="Dark Web (mock)", variable=self.darkweb_var).grid(row=7, column=1, sticky=tk.W)
-        ttk.Checkbutton(left_frame, text="Enrichment (Breach, WHOIS)", variable=self.enrich_var).grid(row=8, column=0, columnspan=2, sticky=tk.W)
+        ttk.Checkbutton(left_frame, text="Enrichment (Breaches)", variable=self.enrich_var).grid(row=8, column=0, columnspan=2, sticky=tk.W)
 
         # Buttons
         btn_frame = ttk.Frame(left_frame)
@@ -290,7 +272,7 @@ class SecretRevealerGUI:
         self.dark_text = scrolledtext.ScrolledText(self.notebook, wrap=tk.WORD, height=20)
         self.notebook.add(self.dark_text, text="🌑 Dark Web")
 
-        # Tab: Graph (placeholder)
+        # Tab: Graph
         self.graph_canvas = tk.Canvas(self.notebook, bg='white')
         self.notebook.add(self.graph_canvas, text="📈 Graph")
 
@@ -302,7 +284,6 @@ class SecretRevealerGUI:
         self.progress = ttk.Progressbar(self.root, mode='indeterminate')
         self.progress.pack(side=tk.BOTTOM, fill=tk.X)
 
-    # ---------- Event Handlers ----------
     def run_scan(self):
         data = {
             'name': self.name_entry.get().strip(),
@@ -318,11 +299,11 @@ class SecretRevealerGUI:
 
         modules = []
         if self.clearnet_var.get():
-            modules.extend(["google", "numverify"])
+            modules.extend(["numverify", "google"])
         if self.darkweb_var.get():
             modules.append("darkweb")
         if self.enrich_var.get():
-            modules.extend(["haveibeenpwned", "whois"])
+            modules.append("haveibeenpwned")
 
         self.progress.start()
         self.status_var.set("Scanning...")
@@ -342,23 +323,30 @@ class SecretRevealerGUI:
 
     def _update_results(self, result):
         identity = result.get('identity', {})
-        summary = f"=== Secret‑Revealer Report ===\n"
+        summary = f"=== Secret‑Revealer Report ===\n\n"
         summary += f"Identity: {identity.get('full_name', 'N/A')}\n"
+        summary += f"Score: {result.get('score', 0)*100:.1f}%\n"
         summary += f"Emails: {len(identity.get('emails', []))}\n"
         summary += f"Phones: {len(identity.get('phones', []))}\n"
         summary += f"Breaches: {len(identity.get('breaches', []))}\n"
-        summary += f"Dark Web Mentions: {len(identity.get('dark_web_mentions', []))}\n"
         summary += f"Search Results: {len(identity.get('search_results', []))}\n"
-        summary += f"Confidence Score: {result.get('score', 0)*100:.1f}%\n\n"
-        # Add phone details
+
+        # Phone details
         for p in identity.get('phones', []):
-            summary += f"Phone: {p.get('number')} – Carrier: {p.get('carrier')}, Country: {p.get('country')}\n"
-        # Add breaches
+            summary += f"\n📞 Phone: {p.get('number')}\n"
+            summary += f"   Carrier: {p.get('carrier')}\n"
+            summary += f"   Country: {p.get('country')} ({p.get('country_code')})\n"
+            summary += f"   Type: {p.get('line_type')}\n"
+
+        # Breaches
         for b in identity.get('breaches', []):
-            summary += f"Breach: {b.get('source')} ({b.get('date')})\n"
-        # Add search results
+            summary += f"\n🔓 Breach: {b.get('source')} ({b.get('date')})\n"
+            summary += f"   {b.get('description', '')[:100]}\n"
+
+        # Search results
         for s in identity.get('search_results', []):
-            summary += f"Search: {s.get('title')} – {s.get('link')}\n"
+            summary += f"\n🔍 Search: {s.get('title')}\n"
+            summary += f"   {s.get('link')}\n"
 
         self.summary_text.delete(1.0, tk.END)
         self.summary_text.insert(tk.END, summary)
@@ -377,7 +365,7 @@ class SecretRevealerGUI:
         self.dark_text.insert(tk.END, dark_str)
 
         self.graph_canvas.delete("all")
-        self.graph_canvas.create_text(10, 10, anchor=tk.NW, text="Graph visualization (mock) – shows connections between entities.", fill='black')
+        self.graph_canvas.create_text(10, 10, anchor=tk.NW, text="Graph: Identity connections (mock).", fill='black')
 
     def _show_error(self, msg):
         messagebox.showerror("Error", f"Scan failed: {msg}")
@@ -397,15 +385,14 @@ class SecretRevealerGUI:
         self.output_data = {}
         self.status_var.set("Cleared")
 
-    # ---------- Menu Actions ----------
     def load_targets(self):
         filepath = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
         if filepath:
-            messagebox.showinfo("Load", f"CSV loaded from {filepath}\n(Feature stub)")
+            messagebox.showinfo("Load", f"CSV loaded from {filepath} (stub)")
 
     def export_json(self):
         if not self.output_data:
-            messagebox.showwarning("Export", "No data to export. Run a scan first.")
+            messagebox.showwarning("Export", "No data to export.")
             return
         filepath = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON files", "*.json")])
         if filepath:
@@ -415,7 +402,7 @@ class SecretRevealerGUI:
 
     def export_html(self):
         if not self.output_data:
-            messagebox.showwarning("Export", "No data to export. Run a scan first.")
+            messagebox.showwarning("Export", "No data to export.")
             return
         filepath = filedialog.asksaveasfilename(defaultextension=".html", filetypes=[("HTML files", "*.html")])
         if filepath:
@@ -426,32 +413,27 @@ class SecretRevealerGUI:
 
     def open_settings(self):
         messagebox.showinfo("Settings", 
-            "Add your API keys in the CONFIG dictionary inside the script:\n"
-            "numverify_key = get from numverify.com (free)\n"
-            "google_api_key and google_cx from Google Custom Search\n"
-            "hibp_api_key optional\n\n"
-            "For WHOIS, install python-whois: pip install python-whois")
+            "Your numverify key is set.\n"
+            "To add Google Search, get a Custom Search API key and CX ID.\n"
+            "For HaveIBeenPwned, add your API key (optional).\n"
+            "Dark web requires Tor + Ahmia integration.")
 
     def toggle_tor(self):
-        current = self.status_var.get()
-        self.status_var.set("Tor toggled (mock)" if "Tor" not in current else "Tor disabled (mock)")
+        self.status_var.set("Tor toggled (mock)")
 
     def show_about(self):
         messagebox.showinfo("About Secret‑Revealer",
-            "Secret‑Revealer v2.1\n"
-            "Real OSINT Intelligence Engine\n"
-            "Author: CAT\n"
-            "License: For authorised use only.\n\n"
-            "Integrates:\n"
-            "- HaveIBeenPwned (breaches)\n"
-            "- numverify (phone lookup)\n"
-            "- Google Custom Search (public profiles)\n"
-            "- WHOIS (domain info)\n"
-            "- Dark web (placeholder for Tor)\n\n"
-            "You need API keys for full functionality."
+            "Secret‑Revealer v2.2\n"
+            "Full OSINT Intelligence Engine\n"
+            "Author: CAT\n\n"
+            "Features:\n"
+            "✅ Phone: Carrier, Country, Location (numverify)\n"
+            "✅ Email: Breach lookup (HaveIBeenPwned)\n"
+            "✅ Search: Public profiles (Google CSE)\n"
+            "⏳ Dark Web: Pending Tor + Ahmia\n\n"
+            "For authorised use only."
         )
 
-# ------------------ MAIN ENTRY ------------------
 if __name__ == "__main__":
     root = tk.Tk()
     app = SecretRevealerGUI(root)
