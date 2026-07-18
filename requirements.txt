@@ -1,0 +1,30 @@
+# Secret‑Revealer v2.0 – Core Requirements
+# ------------------------------------------------------------
+# The GUI and mock engine run with Python's standard library.
+# No external packages are strictly required for basic operation.
+# However, to enable real OSINT modules, uncomment the lines below.
+
+# Core HTTP and parsing
+# requests>=2.31.0
+# beautifulsoup4>=4.12.2
+# lxml>=4.9.3
+
+# Proxy support (Tor, SOCKS)
+# pysocks>=1.7.1
+
+# Data handling and export
+# pandas>=2.0.3          # for CSV bulk import
+# PyYAML>=6.0.1          # for config.yaml
+# python-whois>=0.8.0    # WHOIS lookups
+# dnspython>=2.4.2       # DNS queries
+
+# Optional GUI enhancements
+# Pillow>=10.0.0         # for icons/images
+# tkinter-tooltip>=0.1.0 # for tooltips (if needed)
+
+# For dark web (Tor)
+# stem>=1.8.0            # Tor controller
+
+# ------------------------------------------------------------
+# To install all optional dependencies, run:
+# pip install -r requirements.txt
